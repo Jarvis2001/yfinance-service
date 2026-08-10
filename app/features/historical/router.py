@@ -12,6 +12,7 @@ from fastapi.params import Query
 from ...clients.interface import YFinanceClientInterface
 from ...common.validation import SymbolParam
 from ...dependencies import get_settings, get_yfinance_client
+from ...settings import Settings
 from .models import HistoricalResponse
 from .service import fetch_historical
 
@@ -83,6 +84,7 @@ ALLOWED_INTERVALS = Literal[
 async def get_historical(
     symbol: SymbolParam,
     client: Annotated[YFinanceClientInterface, Depends(get_yfinance_client)],
+    settings: Annotated[Settings, Depends(get_settings)],
     start: date | None = Query(
         None,
         description="Start date (YYYY-MM-DD)",
@@ -114,7 +116,6 @@ async def get_historical(
     if start and end and start > end:
         raise HTTPException(status_code=400, detail="start must be before or equal to end")
 
-    settings = get_settings()
     effective_auto_adjust = (
         auto_adjust if auto_adjust is not None else settings.historical_auto_adjust
     )

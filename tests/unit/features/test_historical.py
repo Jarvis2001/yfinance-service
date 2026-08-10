@@ -5,6 +5,10 @@ import pytest
 from fastapi import HTTPException, status
 from httpx import AsyncClient
 
+from app.dependencies import get_settings
+from app.main import app
+from app.settings import Settings
+
 VALID_SYMBOLS = "AAPL"
 INVALID_SYMBOLS = "!!!"
 NOT_FOUND_SYMBOL = "ZZZZZZZZZZ"
@@ -73,8 +77,66 @@ def test_historical_auto_adjust_flag(client, mock_yfinance_client):
     )
     assert response.status_code == 200
     mock_yfinance_client.get_history.assert_awaited_once_with(
-        VALID_SYMBOLS, start=pd.Timestamp("2024-08-01"), end=pd.Timestamp("2024-08-01"), interval="1d", auto_adjust=False
+        VALID_SYMBOLS,
+        start=pd.Timestamp("2024-08-01"),
+        end=pd.Timestamp("2024-08-01"),
+        interval="1d",
+        auto_adjust=False,
     )
+
+
+def test_historical_auto_adjust_true_flag(client, mock_yfinance_client):
+    """Test that auto_adjust=true query param is propagated to the client."""
+    mock_yfinance_client.get_history.return_value = pd.DataFrame(
+        {
+            "Open": [150.0],
+            "High": [152.0],
+            "Low": [149.0],
+            "Close": [151.0],
+            "Volume": [1000000],
+        },
+        index=pd.to_datetime(["2024-08-01"]).tz_localize("UTC"),
+    )
+
+    response = client.get(
+        f"/historical/{VALID_SYMBOLS}?start=2024-08-01&end=2024-08-01&auto_adjust=true"
+    )
+    assert response.status_code == 200
+    mock_yfinance_client.get_history.assert_awaited_once_with(
+        VALID_SYMBOLS,
+        start=pd.Timestamp("2024-08-01"),
+        end=pd.Timestamp("2024-08-01"),
+        interval="1d",
+        auto_adjust=True,
+    )
+
+
+def test_historical_auto_adjust_uses_setting_default(client, mock_yfinance_client):
+    """Test that auto_adjust defaults to HISTORICAL_AUTO_ADJUST when omitted."""
+    app.dependency_overrides[get_settings] = lambda: Settings(historical_auto_adjust=False)
+
+    mock_yfinance_client.get_history.return_value = pd.DataFrame(
+        {
+            "Open": [150.0],
+            "High": [152.0],
+            "Low": [149.0],
+            "Close": [151.0],
+            "Volume": [1000000],
+        },
+        index=pd.to_datetime(["2024-08-01"]).tz_localize("UTC"),
+    )
+
+    response = client.get(f"/historical/{VALID_SYMBOLS}?start=2024-08-01&end=2024-08-01")
+    assert response.status_code == 200
+    mock_yfinance_client.get_history.assert_awaited_once_with(
+        VALID_SYMBOLS,
+        start=pd.Timestamp("2024-08-01"),
+        end=pd.Timestamp("2024-08-01"),
+        interval="1d",
+        auto_adjust=False,
+    )
+
+    app.dependency_overrides.pop(get_settings, None)
 
 
 @pytest.mark.asyncio
