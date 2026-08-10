@@ -55,6 +55,28 @@ def test_historical_not_found(client, mock_yfinance_client):
     assert "No data for" in response.json()["detail"]
 
 
+def test_historical_auto_adjust_flag(client, mock_yfinance_client):
+    """Test that auto_adjust query param is propagated to the client."""
+    mock_yfinance_client.get_history.return_value = pd.DataFrame(
+        {
+            "Open": [150.0],
+            "High": [152.0],
+            "Low": [149.0],
+            "Close": [151.0],
+            "Volume": [1000000],
+        },
+        index=pd.to_datetime(["2024-08-01"]).tz_localize("UTC"),
+    )
+
+    response = client.get(
+        f"/historical/{VALID_SYMBOLS}?start=2024-08-01&end=2024-08-01&auto_adjust=false"
+    )
+    assert response.status_code == 200
+    mock_yfinance_client.get_history.assert_awaited_once_with(
+        VALID_SYMBOLS, start=pd.Timestamp("2024-08-01"), end=pd.Timestamp("2024-08-01"), interval="1d", auto_adjust=False
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("interval", ["1h", "1d", "1wk", "1mo"])
 async def test_historical_interval_valid(client: AsyncClient, interval: str):

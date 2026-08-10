@@ -11,7 +11,7 @@ from fastapi.params import Query
 
 from ...clients.interface import YFinanceClientInterface
 from ...common.validation import SymbolParam
-from ...dependencies import get_yfinance_client
+from ...dependencies import get_settings, get_yfinance_client
 from .models import HistoricalResponse
 from .service import fetch_historical
 
@@ -98,10 +98,33 @@ async def get_historical(
         description=f"Data aggregation interval. Allowed: {', '.join(get_args(ALLOWED_INTERVALS))}",
         examples={"default": {"summary": "Interval", "value": "1d"}},
     ),
+    auto_adjust: bool | None = Query(
+        None,
+        description=(
+            "If provided, returns raw or adjusted historical prices. "
+            "When omitted, the service default from HISTORICAL_AUTO_ADJUST is used."
+        ),
+        examples={
+            "adjusted": {"summary": "Auto-adjust prices", "value": True},
+            "raw": {"summary": "Raw prices without adjustments", "value": False},
+        },
+    ),
 ) -> HistoricalResponse:
     """Return historical OHLCV data for the symbol in the optional date range."""
     if start and end and start > end:
         raise HTTPException(status_code=400, detail="start must be before or equal to end")
 
+    settings = get_settings()
+    effective_auto_adjust = (
+        auto_adjust if auto_adjust is not None else settings.historical_auto_adjust
+    )
+
     # `interval` is validated by Pydantic/FastAPI via the `ALLOWED_INTERVALS_LITERAL` type alias.
-    return await fetch_historical(symbol, start, end, client, interval=interval)
+    return await fetch_historical(
+        symbol,
+        start,
+        end,
+        client,
+        interval=interval,
+        auto_adjust=effective_auto_adjust,
+    )
